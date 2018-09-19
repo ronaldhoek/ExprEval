@@ -1,0 +1,605 @@
+prExpr.txt
+
+Tutorial documentation for prExpr.pas.
+Martin Lafferty - Production Robots Engineering Ltd
+robots@enterprise.net
+http://homepages.enterprise.net/robots
+
+Version 1.04
+
+The Basics
+----------
+*TExpression*
+
+Delphi already implements more than one mechanism for providing type flexibility - variants
+are the most notable of these. It may have been rational to implement this unit using Variants,
+but I have chosen not to do so. Instead, I use an a approach which is (vaguely) analogous to
+the approach used by TField and its descendents.
+
+The base class of prExpr is TExpression, which represents an expression in the most general
+sense. It has a type and a Value. The value of an expression can be retrieved directly,
+using the functions:
+
+    function AsObject: TObject;
+    function AsString: String;
+    function AsFloat: Double;
+    function AsInteger: Integer;
+    function AsBoolean: Boolean;
+    function ExprType: TExprType;
+
+note
+    TExprType = (ttObject, ttString, ttFloat, ttInteger, ttEnumerated, ttBoolean);
+
+Not all of these functions will yield a valid result, but more than one of them might. This
+sounds a little confusing, but isn't. Consider an expression in which ExprType = ttString and
+AsString = 'This is a string'. In this case, AsFloat, AsInteger, AsBoolean are all invalid, and
+any attempt to reference them will raise an exception (of type EExpression). On the other hand,
+an expression where ExprType = ttBoolean and AsBoolean = TRUE, will yield valid results for all
+of AsInteger (1), AsFloat (1.0), AsString ('TRUE'). These are called (my nomenclature) 'implicit
+upcasts'. By comparison to Pascal, Type checking is quite liberal and these 'upcasts' will always
+be made if required by the syntax of the expression. The four supported types are graded
+according to their 'generality'. By this reckoning ttString > ttFloat > ttInteger > ttEnumerated >
+ttBoolean. A more 'specific' type will always be cast to a more 'general' type if necessary.
+Typecasts can also be forced using Pascal Syntax (e.g. String(10) = '10'), but are seldom
+necessary.
+
+In contrast 'downcasts' ie from a general type to a more specific will never be made implicitly.
+They can however be forced using Pascal syntax. (e.g. Integer('10') = 10). These 'downcasts' will
+not fail when the expression is parsed, but may well fail when it is evaluated. For example
+Integer('ten') is not bad syntax, but it will not evaluate.
+
+
+*ParseTime and EvaluateTime*
+Calling AsString, AsInteger, AsInteger etc... is called 'Evaluating' the expression. This is
+quite different to 'parsing' the string which describes the expression. This is called parsing
+the expression. You have to create the expression before you can evaluate it. Note that
+determining the type of an expression (whether it is ttString, ttInteger or whatever) is not
+the same as evaluting it. Type Evaluation (calling the function ExprType) is done during parsing
+and is must not require the expression to be evaluated.
+
+*IValue*
+Although the value of an expression object can be extracted by calling AsString, AsFloat etc
+directly these functions will normally be called using the interface type IValue. The reason
+for this is to allow the compiler to handle most of the difficult details of allocating and
+disposing of instances of expressions. The compiler handles interface variables more
+intelligently than class variables; automatically incrementing an objects reference count when an interface
+variable is assigned, and automatically decrementing the reference count (and disposing of
+the object) when the variable is reassigned or goes out of scope. This is a significant burden
+of responsibility (and potential source of errors) removed from the programmer.
+
+The basic mechanism for creating expressions is the function
+
+function CreateExpression( const S: String;
+                IdentifierFunction: TIdentifierFunction): IValue;
+
+Perhaps unsurprisingly, CreateExpression creates an object of type TExpression (or a descendent)
+and returns an interface of type IValue. This interface may be used to evaluate the expression.
+
+Parameters
+  S: String
+  This constains the string you wish to parse, as you would enter it into your code or into
+  the 'Evalute/Modify' dialog box.
+
+  arbitrary examples:
+
+  4*5 + 2
+  (pi/3 + 2.5) < 5.78
+  410 div Pos('st', 'this is a string')
+
+  IdentifierFunction:
+  This is a function which you may provide if you wish to support additional indentifiers
+  in addition to the standard functions and operators. If your expressions contain only
+  literals, operators and standard functions, you may pass NIL as an identifier function.
+
+If you create an expression using CreateExpression you will not normally need to dispose of
+it explicitly: You simply allow the variable holding the result to fall out of scope. If you
+with to specifically free an expression assigned to a static variable, assign that variable
+to nil.
+
+e.g.
+
+program HelloWorld;
+
+{this program parses and evaluates the expression 'Hello ' + 'World' and writes
+the result to the console. The expression is explicitly disposed of by setting
+the interface reference to nil. This would not be necessary if Value was on the stack,
+and is pointless here as the program is exiting anyway. Illustrates a point though.
+Remember that '' = ' inside a quoted string.}
+
+uses
+  prExpr;
+{$APPTYPE Console}
+var
+  Value: IValue;
+
+begin
+  Value:= CreateExpression('''Hello '' + ''World''', nil); {parse & allocate expression}
+  Writeln(Value.AsString);
+  Value:= nil                                              {dispose of expression}
+end.
+
+
+
+Example 1
+---------
+
+procedure TTestForm.EG1;
+var
+  s: String;
+  E: IValue;
+begin
+  s:= '';
+  if InputQuery('Example 1', 'Enter an expression...', s) then
+  begin
+    E:= CreateExpression(s, nil);
+    if Assigned(E) then
+    begin
+      MessageDlg(
+        Format('E.AsString = %s E.ExprType = %s',
+               [E.AsString, E.TypeName]),
+        mtInformation, [mbOK], 0)
+    end
+  end
+end;
+
+This code is implemented in the 'Tester' project distributed with this file, and attached to
+TestForm.EG1Button. The string entered into the an input query box is parsed with CreateExpression.
+If there is a valid result then the value is displayed in a message box. When the variable E goes
+out of scope, then the expression is de-allocated. This example can be used to experiment with
+the basic format of expressions and the standard operators.
+
+Standard Operators
+------------------
+The best reference source for the operators / functions supported by this
+unit is the Borland Pascal 7.0 Language Guide - Ch6 'Expressions'. This is
+possibly the most recent piece of clear, comprehensive documentation issued
+by Borland. What follows is summarised from this excellent source material.
+
+The following operators are supported:
+
+Binary Arithmetic Operators
+Operator   Operation          Operand Types         Result Type
+--------   ---------          -------------         -----------
++          addition           Integer               Integer
+                              Float                 Float
+-          subtraction        Integer               Integer
+                              Float                 Float
+*          multiplication     Integer               Integer
+                              Float                 Float
+/          division           Integer               Float
+                              Float                 Float
+div        integer division   Integer               Integer
+mod        modulo             Integer               Integer
+^          Exponent           Integer               Float
+                              Float                 Float
+
+(note that ^ as an arithmetic operator is NOT a pascal operator. It
+always returns a float)
+
+Unary Arithmetic Operators
+Operator   Operation          Operand Type          Result Type
+--------   ---------          ------------          -----------
++          sign identity      Integer               Integer
+                              Float                 Float
+-          sign negation      Integer               Integer
+                              Float                 Float
+
+Logical (BITWISE) Operators
+(NB table 6.4 of BP Language guide contains errors)
+Operator   Operation          Operand Type(s)       Result Type
+--------   ---------          ---------------       -----------
+not        bitwise negation   Integer               Integer
+and        bitwise and        Integer               Integer
+or         bitwise or         Integer               Integer
+xor        bitwise xor        Integer               Integer
+shl        shift left         Integer               Integer
+shr        shift right        Integer               Integer
+
+Boolean Operators
+Operator   Operation          Operand Type(s)       Result Type
+--------   ---------          ---------------       -----------
+not        negation           Boolean               Boolean
+and        logical and        Boolean               Boolean
+or         logical or         Boolean               Boolean
+xor        logical xor        Boolean               Boolean
+
+String Operator
+Operator   Operation          Operand Types         Result Type
+--------   ---------          -------------         -----------
++          concatenation      String                String
+
+Relational Operators
+Operator Type  Operation      Operand Types         Result Type
+-------------  ---------      -------------         -----------
+=              equal          Compatible pair       Boolean
+<>             not equal      Compatible pair       Boolean
+<              less than      Compatible pair       Boolean
+>              greater than   Compatible pair       Boolean
+<=             less than or   Compatible pair       Boolean
+               equal to
+>=             greater than   Compatible pair       Boolean
+               or equal to
+
+Note that this unit does not support Set Types or their operators
+
+Standard Functions
+------------------
+The following Standard functions are supported. For a full description of
+these functions and their parameters refer to Delphi or BP on-line help.
+
+Arithmetic functions
+ TRUNC, ROUND, ABS, ARCTAN, COS, EXP, FRAC, INT, LN, PI, SIN, SQR, SQRT
+
+
+String Functions
+  UPPER, LOWER, COPY, POS, LENGTH
+
+in addition to the RTL functions, the following specials are supported:
+
+ function Power(Base, Exponent: Float): Float;
+
+This unit also supports a form of the 'C' construct known as 'Conditional Expression',
+also found in many spreadsheets. This is the IF expression
+
+IF(Condition, TrueResult, FalseResult)
+
+Condition is a Boolean expression. When the function is evaluated,
+it returns TrueResult if Condition else FalseResult. TrueResult and FalseResult
+must be of the same type, otherwise it would not be possible to determine the
+type of an IF expression at 'parse-time' without evaluating the condition, which
+is not allowed.
+
+
+Identifier Functions
+--------------------
+The capability of the parser to recognise artibrary identifiers may be extended
+by the use to an Identifier function. This is a powerful mechanism, but neither
+simple not particularly intuitive.
+
+In order to really make the most of the identifier function you need to know more
+about how the parser works. When the parser comes across a token which it does not
+recognise as a literal, operator, or standard function, it calls the identifier
+function. It is important to remember that the identifier function is only called when
+the input string, S, is parsed i.e. the result of a call to CreateExpression is being
+constructed. Once GetExpression has returned the identifier function is not called.
+In particular the identifier function is not called when an expression is evaluated.
+
+This distinction between the time when an expression is created (let's call it 'parse-time')
+and when it is evaluated ('evaluate-time') is important, particularly if the result of a
+call to CreateExpression is saved for future evaluation rather than simply evaluated then
+thrown away.
+
+This difference between 'parse-time' and 'evaluate-time' is important when considering
+how to handle non-standard identifiers.
+
+'Constant' identifiers
+----------------------
+It may be that you wish to substitute a constant expression for an identifier when
+a given string is parsed, and do not expect the value of the resultant expression to change
+during the lifetime of the result (of the call to CreateExpression). This lifetime might
+be really short, as in Example1 above or it might be the lifetime of your program.
+This sort of constant substitution is quite easy to do.
+
+Consider the following example of an identifier function.
+
+Example 2. Constant Substitution
+--------------------------------
+
+function TTestForm.EG2IDFunc( const Identifier: String;
+                              ParameterList: TParameterList): IValue;
+{this identifier function is used for example 2. It supports the
+identifiers SC, FC, IC, BC, 'Form' and any value of TEnumeratedType}
+begin
+  {these identifiers do not require parameters, so raise an exception if they exist.
+   Note that if a parameter list is passed (due to bad syntax) and then we return a
+   valid result, the parameter list will be orphaned and there will be a memory leak}
+  if Assigned(ParameterList) then
+    raise EExpression.CreateFmt('Identifier %s does not require parameters', [Identifier]);
+  if Identifier = 'SC' then
+    Result:= TStringLiteral.Create('This is a string')
+  else
+  if Identifier = 'FC' then
+    Result:= TFloatLiteral.Create(8.9)
+  else
+  if Identifier = 'IC' then
+    Result:= TIntegerLiteral.Create(42)
+  else
+  if Identifier = 'BC' then
+    Result:= TBooleanLiteral.Create(false)
+  else
+  if Identifier = 'FORM' then
+    Result:= TObjectRef.Create(Self)
+  else
+    Result:= CheckEnumeratedVal(TypeInfo(TEnumeratedType), Identifier)
+end;
+
+procedure TForm1.EG2ButtonClick(Sender: TObject);
+var
+  s: String;
+  E: TExpression;
+begin
+  s:= '';
+  if InputQuery('Example 2', 'Expression may contain' +
+     ' SC, FC, IC or BC', s) then
+  begin
+    E:= CreateExpression(s, EG2IDFunc);
+    if Assigned(E) then
+    try
+      MessageDlg(
+        Format('E.AsString = %s E.ExprType = %s',
+               [E.AsString, NExprType[E.ExprType]]),
+        mtInformation, [mbOK], 0)
+    finally
+      E.Free
+    end
+  end
+end;
+
+Note that the IdentifierFunction (in this case EG2IDFunc) is implemented and then its address
+is passed to CreateExpression. The identifier function is called whenever the parser
+(CreateExpression) encounters an unknown identifier. Note that the additional identifiers do
+not require parameters, so if a parameter list is passed to the EG2IDFunc, an exception is
+raised. This step is important as if a parameter list is passed, and the the identifier list
+returns non-nil, then disposal of this list is the responsibility of the Identifier function
+or the expression it creates. See note on 'Supporting Parameters' below.
+
+It is most important to appreciate that the string passed to the Identifier function as
+Identifier is always in UPPER CASE regardless of its case in the expression. As in Pascal
+identifiers are case insensitive in expressions.
+
+Because the result of the IdentifierFunction is an interface, the value returned by the
+IdentifierFunction need not be created by that call - it might be a reference to another
+object in global scope, or another IValue.
+
+The last bit of the code above is a little obscure:
+
+  if Identifier = 'FORM' then
+    Result:= TObjectRef.Create(Self)
+  else
+    Result:= CheckEnumeratedVal(TypeInfo(TEnumeratedType), Identifier)
+
+*Class Variables*
+Version 1.04 of prExpr supports class variables in expressions. There is no literal syntax
+for variables of this type: they can only be handled by the use of an identifier function.
+For example, in EG2IDFunc a reference to an identifier called 'Form' returns an object
+reference. This is done by instantiating an expression of type TObjectRef in the identifier
+function, as shown above. The published properties of this object may be included in any
+expression. For example the string 'Form.Height' would successfully parse, as Form would
+return an object reference (in this case 'Self') with a published property of 'Height'. This
+expression would evaluate to the Height property of Form. The following property types are
+supported:
+
+PropertyType         ExprClass
+Class                ttObject
+Boolean              ttBoolean {native Boolean only. Otherwise enumeration}
+Enumeration          ttEnumeration
+Integer, Char        ttInteger
+Single, Double,
+Extended             ttFloat
+String, Shortstring
+WideString           ttString
+
+*Enumerated Types*
+If you have enumerated types which you wish to use in your expressions then
+pass any unknown identfiers to the function
+  CheckEnumeratedVal(TypeInfo: PTypeInfo; const Identifier: String): IValue;
+
+if the identifier is a member of the type indicated by TypeInfo then the function
+will return an interface to a newly created TEnumeratedLiteral, otherwise it
+returns nil. If you have more than one enumerated type you wish to support, then
+pass your identifier to each type in turn until it returns non-nil.
+
+
+Note that there is no reason why the IdentifierFunction cannot call CreateExpression
+to obtain a result. An Alternative implementation of the Identifier function above
+might be:
+
+function TTestForm.EG2IDFunc( const Identifier: String;
+                              ParameterList: TParameterList): IValue;
+begin
+  if Assigned(ParameterList) then
+    raise EExpression.CreateFmt('Identifier %s does not require parameters', [Identifier]);
+  if Identifier = 'SC' then
+    Result:= CreateExpression('This is a string', nil)
+  else
+  if Identifier = 'FC' then
+    Result:= CreateExpression(8.9, nil)
+  else
+  if Identifier = 'IC' then
+    Result:= CreateExpression(42, nil)
+  else
+  if Identifier = 'BC' then
+    Result:= CreateExpression(false, nil)
+  else
+  if Identifier = 'FORM' then
+    Result:= TObjectRef.Create(Self)
+  else
+    Result:= CheckEnumeratedVal(TypeInfo(TEnumeratedType), Identifier)
+end;
+
+If an identifier expression calls CreateExpression it can pass itself as an identifier
+expression. If, however, the implementation of a particular identifier depends on that same
+identifier you will (obviously) get an infinite recursive loop.
+
+
+Example 3 Getting a value at 'evaluate-time'
+--------------------------------------------
+There may be circumstances when you want a particular identifier to represent a value that
+may change during the lifetime of your program, and you cannot afford the computational
+overhead of creating a new expression (by parsing a string) each time you want to evaluate
+the expression. In order to do this, you need to derive a descendent of TExpression. In
+the following simple example we define TTimeString = class(TExpression). This Expression
+has type ttString and returns the current time as a string in the format hh:mm:ss.
+The Identifier function EG3IDFunc returns an Expression of type TTimeString when passed
+an identifier of 'TIMESTRING' (NOTE: not 'TimeString'!)
+
+When we click EG3Button we are prompted to enter an expression which is parsed and assigned
+to the variable EG3Expr (a field of TForm1). EG3Timer executes EG3TimerTimer every 5 seconds
+which evaluates the value of EG3Expr.AsString and assigns it to EG3Result.Caption. The
+important thing to note is that although EG3Expr is created only when EG3Button is clicked, if
+the string from which EG3Expr is derived contains the token TimeString then each time
+EG3Expr.AsString is evaluated, its value is different, depending on the system time.
+
+Try entering an expression like
+
+'The time is now ' + TimeString
+
+for example 3.
+
+type
+  TTimeString =
+  class(TExpression)
+  protected
+    function GetAsString: String; override;
+    function GetExprType: TExprType; override;
+  end;
+
+function TTimeString.GetAsString: String;
+begin
+  Result:= FormatDateTime('hh:mm:ss', SysUtils.Time)
+end;
+
+function TTimeString.GetExprType: TExprType;
+begin
+  Result:= ttString
+end;
+
+function TTestForm.EG3IDFunc( const Identifier: String;
+                              ParameterList: TParameterList): IValue;
+{this identifier function is used for example 3. It supports the
+identifiers TimeString and Form}
+begin
+  if Assigned(ParameterList) then
+    raise EExpression.CreateFmt('Identifier %s does not require parameters', [Identifier]);
+  if Identifier = 'TIMESTRING' then
+    Result:= TTimeString.Create
+  else
+  if Identifier = 'FORM' then
+    Result:= TObjectRef.Create(Self)
+  else
+    Result:= nil
+end;
+
+procedure TTestForm.EG3TimerTimer(Sender: TObject);
+begin
+  if Assigned(EG3Expr) then
+    EG3Result.Caption:= EG3Expr.AsString
+  else
+    EG3Result.Caption:= 'EG3 not running'
+end;
+
+procedure TTestForm.EG3;
+var
+  s: String;
+begin
+  s:= 'TimeString';
+  if InputQuery('Example 3', 'Expression may contain ' + s, s) then
+  begin
+    EG3Expr:= CreateExpression(s, EG3IDFunc);  {automatically disposes of
+                                                anything assigned to EG3Expr}
+    EG3Result.Caption:= EG3Expr.AsString
+  end
+end;
+
+
+Using Parameter Lists
+---------------------
+It may be that you wish to define a custom function which has an arbitrary number and type
+of parameters. In your expression string this might look like
+
+   MyFunc(10*2 + 3, 'A String', True)
+
+Upon encountering a construct like this, CreateExpression will construct a parameter list
+before calling the Identifier Function. A Parameter list is not an Expression, it is a
+descendent of TList which contains IValues, one for each parameter. The parameter list
+releases its values when it is freed.
+
+If the identifier function returns nil, or raises an exception then CreateExpression will
+free the parameter list. Otherwise, it is assumed that the parameter list becomes the
+responsibility of the Identifier Function or its result.
+
+The identifier function may check the types of all its parameters but should not evaluate
+any of them (most of the time you will get away with this, but it is not a good idea unless
+you are very sure that the parameters are constant). If the values of the parameter list are
+relevant to the function result (one assumes they are) then the parameter list must be saved
+for later examination, normally as a field of the Expression which is returned by the
+Identifier Function. Generally, this will be a descendent of TFunction (above). TFunction is
+an abstract - it differs from TExpression in that it has inbuilt mechanisms for handling
+parameters: you can pass in a parameter list when you construct it and the list will be
+freed by TFunction.Destroy.
+
+Example 4 - Parameters
+----------------------
+The following example uses parameters to construct a constant expression within an Identifier
+function. The identifier function disposes of the parameter list: the example uses no
+descendent of TFunction. To see how to implement a descendent of TFunction and
+refer to a parameter list at 'evaluate-time' examine the implementations of the standard
+functions.
+
+We want CreateExpression to recognise the following function
+
+function Mean(a, b: Float): Float;
+begin
+  Result:= (a + b)/2
+end;
+
+function TForm1.EG4IDFunc( const Identifier: String;
+                              ParameterList: TParameterList): TExpression;
+begin
+  if Identifier = 'MEAN' then
+  begin
+    if Assigned(ParameterList) and
+       (ParameterList.Count = 2) then
+    begin
+      with ParameterList do
+        Result:= TFloatLiteral.Create((AsFloat[0] + AsFloat[1])/2);
+      ParameterList.Free
+    end else
+    begin
+      raise EExpression.CreateFmt('Invalid Parameters to %s', [Identifier]);
+    end;
+  end else
+  begin
+    Result:= nil
+  end
+end;
+
+The interesting things to note about EG4IDFunc are the following:
+the parameters are evaluated at 'parse-time' i.e before CreateExpression returns. The results
+are then used to create a literal float expression to return. The value of this expression
+will not now change within the lifetime of its 'parent' expression. Because the EG4IDFunc does
+not return a descendent of TFunction, and does not refer to its Parameter list at
+'evaluate-time' it needs to dispose of its parameter list before it returns. This task would
+'normally' be handled by TFunction.Destroy if EG4IDFunc suceeds. If EG4IDFunc fails
+(raises an exception or returns nil) then this duty is carried out by the caller, generally
+CreateExpression.
+
+procedure TForm1.EG4ButtonClick(Sender: TObject);
+var
+  s: String;
+  E: TExpression;
+begin
+  s:= '';
+  if InputQuery('Example 4', 'Expression may contain ' +
+     'Mean(a, b: Float)', s) then
+  begin
+    E:= CreateExpression(s, EG4IDFunc);
+    if Assigned(E) then
+    try
+      MessageDlg(
+        Format('E.AsString = %s E.ExprType = %s',
+               [E.AsString, NExprType[E.ExprType]]),
+        mtInformation, [mbOK], 0)
+    finally
+      E.Free
+    end
+  end
+end;
+
+
+Other Ideas
+-----------
+There is a lot of scope for extending the parser/evaluator presented here. I have already
+implemented a version which handles Date and Time computations. An Identifier function
+might be written to recognise field names and extract values from a database table at
+evaluate time. These sorts of things are not difficult.

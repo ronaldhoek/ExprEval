@@ -1,0 +1,12 @@
+In the Delphi version specific project file (dproj) the file 'TestExprEval.dpr'
+is referenced without a Delphi version specific suffix.
+
+To compile the project using a different Delphi version (newer/older),
+please do the following;
+* Create a copy of 'dproj' file that is the most recent PREVIOUS 
+  version of the Delphi version you need to create
+* Name this file accodingly the naming convention for the new Dlephi version.
+
+
+NOTE:
+Never change the filename of the 'dpr' file!!!
