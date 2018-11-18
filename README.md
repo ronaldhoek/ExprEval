@@ -12,7 +12,10 @@ Martin was good enough to grant non-exclusive usage and distribution rights to a
 In 1997 prExpr was among the fastest and most reliable of them all and maybe still is.
 As time went on I made some changes to the orriginal code and extended the base expression parser with two extra units!
 
-Currently I still use this library extensivvly in production enviroments and have never had to need anything else for parsing expression in Delphi applications
+The most important change I added to this library was the use of 'AsVariant' and the interfaced 'ParameterList'.
+I also added the 'IValue' interface to the original TExpression object (because I only had a copy a that time), but later I noticed Martin also added this to the library with version 1.04.
+
+Currently I still use this library extensively in production environments and have never had to need anything else for parsing expressions in Delphi applications.
 
 I could not find any new work by Martin on the prExpr code, so I thought it would be nice to share his work with mine to the world on Git!.
 
