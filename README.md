@@ -19,4 +19,6 @@ Currently I still use this library extensively in production environments and ha
 
 I could not find any new work by Martin on the prExpr code, so I thought it would be nice to share his work with mine to the world on Git!.
 
+I'll try to update the Wiki in time. For now it only contains some basics about the library and a reference to the documents in the [/Docs](https://github.com/ronaldhoek/ExprEval/tree/master/Docs) folder of the git project.
+
 Please enjoy using the library.
